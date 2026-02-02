@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "fastserverpings",
+  "version": "${version}",
+  "name": "FastServerPings",
+  "description": "Rewritten server ping pipeline using optimized Netty I/O, reduced overhead, and SWR caching for faster server lists on Fabric.",
+  "authors": [],
+  "contact": {
+    "repo": "https://github.com/vansencool/FastServerPings"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "net.vansen.fastserverpings.FastServerPings"
+    ]
+  },
+  "mixins": [
+    "fastserverpings.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": "*",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

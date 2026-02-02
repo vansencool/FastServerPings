@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.vansen.fastserverpings.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ServerPingerMixin"
+  ],
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

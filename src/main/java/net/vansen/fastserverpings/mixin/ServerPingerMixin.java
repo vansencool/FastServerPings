@@ -78,7 +78,6 @@ public abstract class ServerPingerMixin {
         String key = entry.address;
         CacheEntry cached = FastPingCache.get(key);
 
-        /*
         if (cached != null && FastPingCache.fresh(cached)) { // SWR: stale-while-revalidate
             var s = cached.status();
 
@@ -108,11 +107,6 @@ public abstract class ServerPingerMixin {
             entry.ping = -1;
             entry.playerListSummary = Collections.emptyList();
         }
-
-         */
-        entry.label = Text.translatable("multiplayer.status.pinging");
-        entry.ping = -1;
-        entry.playerListSummary = Collections.emptyList();
 
         try {
             String addr = entry.address;

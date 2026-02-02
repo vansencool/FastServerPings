@@ -4,6 +4,9 @@
 !gradle/
 !gradle/**
 
+!assets
+!assets/**
+
 !src/
 !src/**
 

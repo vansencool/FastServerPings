@@ -8,10 +8,9 @@ import java.util.concurrent.atomic.LongAdder;
 
 public final class PingAvgMetrics {
 
-    public static boolean USE_FASTPING = true;
-
     private static final LongAdder totalNs = new LongAdder();
     private static final LongAdder count = new LongAdder();
+    public static boolean USE_FASTPING = true;
 
     public static long start() {
         return System.nanoTime();

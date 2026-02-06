@@ -30,4 +30,4 @@ Client-side only
 
 You may use this mod in modpacks.
 Please do not merge this mod into other clients or mods without permission.
-If you want to do so, contact me first.
+If you want to do so, contact me first (`vansencool` on discord).

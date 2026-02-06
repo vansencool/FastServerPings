@@ -17,6 +17,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.ScheduledFuture;
 import net.minecraft.MinecraftVersion;
 import net.minecraft.server.ServerMetadata;
 import net.minecraft.text.Text;
@@ -27,20 +28,22 @@ import net.vansen.fastserverpings.pipeline.utils.VarIntUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @SuppressWarnings("deprecation")
 public final class FastPing {
 
+    private static final EventLoopGroup GROUP = new NioEventLoopGroup(4); // Backwards compatibility with older Netty versions
     public static boolean DEBUG = false;
 
     private static void log(String s) {
         if (DEBUG) System.out.println("[FastPing] " + s);
     }
-
-    private static final EventLoopGroup GROUP = new NioEventLoopGroup(4); // Backwards compatibility with older Netty versions
 
     /**
      * Pings a Minecraft server at the given host and port, resolving SRV records if necessary.
@@ -81,136 +84,6 @@ public final class FastPing {
         return future;
     }
 
-    /**
-     * Handler for managing the ping process, including sending handshake, status request,
-     * handling responses, and calculating ping time.
-     */
-    private static final class PingHandler extends ChannelInboundHandlerAdapter {
-
-        private final CompletableFuture<Status> future;
-        private final String host;
-        private final int port;
-
-        private final ByteBuf cumulation = Unpooled.buffer();
-        private long pingStart;
-        private String statusJson;
-
-        /**
-         * @param future CompletableFuture to complete with the result
-         * @param host the server host
-         * @param port the server port
-         */
-        PingHandler(@Nullable CompletableFuture<Status> future, @NotNull String host, int port) {
-            this.future = future;
-            this.host = host;
-            this.port = port;
-        }
-
-        @Override
-        public void channelActive(@NotNull ChannelHandlerContext ctx) {
-            log("channelActive");
-
-            ByteBuf handshake = handshakeBuf();
-            ByteBuf statusReq = statusRequestBuf();
-
-            log("Sending handshake (" + handshake.readableBytes() + " bytes)");
-            ctx.write(handshake);
-
-            log("Sending status request (" + statusReq.readableBytes() + " bytes)");
-            ctx.writeAndFlush(statusReq);
-        }
-
-        @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
-            ByteBuf in = (ByteBuf) msg;
-            cumulation.writeBytes(in);
-            in.release();
-
-            while (true) {
-                cumulation.markReaderIndex();
-                try {
-                    int packetLen = VarIntUtils.readVarInt(cumulation); // Read packet length
-                    if (cumulation.readableBytes() < packetLen) {
-                        cumulation.resetReaderIndex();
-                        return;
-                    }
-
-                    ByteBuf packet = cumulation.readSlice(packetLen); // Read packet
-                    handlePacket(ctx, packet);
-                } catch (IndexOutOfBoundsException e) {
-                    cumulation.resetReaderIndex();
-                    return;
-                }
-            }
-        }
-
-        private void handlePacket(ChannelHandlerContext ctx, ByteBuf packet) {
-            int id = VarIntUtils.readVarInt(packet); // Read packet id
-            log("Received packet id=" + id);
-
-            if (id == 0) {
-                int len = VarIntUtils.readVarInt(packet); // Read JSON length
-                byte[] arr = new byte[len];
-                packet.readBytes(arr);
-                statusJson = new String(arr, StandardCharsets.UTF_8);
-                log("Status JSON received");
-
-                pingStart = System.nanoTime();
-                ctx.writeAndFlush(pingPacket(pingStart)); // Send ping packet
-                log("Ping sent");
-            }
-            else if (id == 1) {
-                packet.readLong(); // Read pong payload
-                long ping = (System.nanoTime() - pingStart) / 1_000_000;
-                log("Pong received: " + ping + "ms");
-
-                Status s = parse(statusJson, ping);
-                future.complete(s);
-                ctx.close();
-            }
-            else {
-                log("Unknown packet id " + id);
-            }
-        }
-
-        @Override
-        public void exceptionCaught(@NotNull ChannelHandlerContext ctx, @Nullable Throwable cause) {
-            log("Exception: " + cause);
-            future.completeExceptionally(cause);
-            ctx.close();
-        }
-
-        private ByteBuf handshakeBuf() {
-            ByteBuf inner = Unpooled.buffer(); // Handshake packet
-            VarIntUtils.writeVarInt(inner, 0);
-            VarIntUtils.writeVarInt(inner, MinecraftVersion.create().protocolVersion()); // Protocol version
-            VarIntUtils.writeVarInt(inner, host.length());
-            inner.writeCharSequence(host, StandardCharsets.UTF_8);
-            inner.writeShort(port);
-            VarIntUtils.writeVarInt(inner, 1);
-            return frame(inner); // Frame the packet
-        }
-
-        private ByteBuf statusRequestBuf() {
-            ByteBuf inner = Unpooled.buffer();
-            VarIntUtils.writeVarInt(inner, 0);
-            return frame(inner);
-        }
-
-        private ByteBuf pingPacket(long time) {
-            ByteBuf inner = Unpooled.buffer();
-            VarIntUtils.writeVarInt(inner, 1);
-            inner.writeLong(time);
-            return frame(inner);
-        }
-
-        private ByteBuf frame(@NotNull ByteBuf inner) {
-            ByteBuf out = Unpooled.buffer();
-            VarIntUtils.writeVarInt(out, inner.readableBytes()); // Packet length
-            out.writeBytes(inner);
-            return out;
-        }
-    }
     private static Status parse(@NotNull String json, long ping) {
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
@@ -264,6 +137,154 @@ public final class FastPing {
         } catch (Exception e) {
             log("MOTD parse failed");
             return Text.literal("");
+        }
+    }
+
+    /**
+     * Handler for managing the ping process, including sending handshake, status request,
+     * handling responses, and calculating ping time.
+     */
+    private static final class PingHandler extends ChannelInboundHandlerAdapter {
+
+        private final CompletableFuture<Status> future;
+        private final String host;
+        private final int port;
+
+        private final ByteBuf cumulation = Unpooled.buffer();
+        private long pingStart;
+        private String statusJson;
+
+        private ScheduledFuture<?> timeout;
+
+        /**
+         * @param future CompletableFuture to complete with the result
+         * @param host   the server host
+         * @param port   the server port
+         */
+        PingHandler(@NotNull CompletableFuture<Status> future, @NotNull String host, int port) {
+            this.future = future;
+            this.host = host;
+            this.port = port;
+        }
+
+        @Override
+        public void channelActive(@NotNull ChannelHandlerContext ctx) {
+            log("channelActive");
+            //noinspection resource
+            timeout = ctx.executor().schedule(() -> {
+                if (!future.isDone()) {
+                    future.completeExceptionally(new TimeoutException("Ping timeout"));
+                    ctx.close();
+                }
+            }, 7, TimeUnit.SECONDS); // TODO: Make timeout configurable
+
+            ByteBuf handshake = handshakeBuf();
+            ByteBuf statusReq = statusRequestBuf();
+
+            log("Sending handshake (" + handshake.readableBytes() + " bytes)");
+            ctx.write(handshake);
+
+            log("Sending status request (" + statusReq.readableBytes() + " bytes)");
+            ctx.writeAndFlush(statusReq);
+        }
+
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            ByteBuf in = (ByteBuf) msg;
+            cumulation.writeBytes(in);
+            in.release();
+
+            while (true) {
+                cumulation.markReaderIndex();
+                try {
+                    int packetLen = VarIntUtils.readVarInt(cumulation); // Read packet length
+                    if (cumulation.readableBytes() < packetLen) {
+                        cumulation.resetReaderIndex();
+                        return;
+                    }
+
+                    ByteBuf packet = cumulation.readSlice(packetLen); // Read packet
+                    handlePacket(ctx, packet);
+                } catch (IndexOutOfBoundsException e) {
+                    cumulation.resetReaderIndex();
+                    return;
+                }
+            }
+        }
+
+        @Override
+        public void channelInactive(@NotNull ChannelHandlerContext ctx) {
+            if (!future.isDone()) {
+                future.completeExceptionally(new IOException("Channel closed"));
+            }
+        }
+
+        private void handlePacket(ChannelHandlerContext ctx, ByteBuf packet) {
+            int id = VarIntUtils.readVarInt(packet); // Read packet id
+            log("Received packet id=" + id);
+
+            if (id == 0) {
+                int len = VarIntUtils.readVarInt(packet); // Read JSON length
+                byte[] arr = new byte[len];
+                packet.readBytes(arr);
+                statusJson = new String(arr, StandardCharsets.UTF_8);
+                log("Status JSON received");
+
+                pingStart = System.nanoTime();
+                ctx.writeAndFlush(pingPacket(pingStart)); // Send ping packet
+                log("Ping sent");
+            } else if (id == 1) {
+                packet.readLong(); // Read pong payload
+                long ping = (System.nanoTime() - pingStart) / 1_000_000;
+                log("Pong received: " + ping + "ms");
+
+                Status s = parse(statusJson, ping);
+                if (timeout != null) {
+                    timeout.cancel(false);
+                }
+                future.complete(s);
+                ctx.close();
+            } else {
+                log("Unknown packet id " + id);
+            }
+        }
+
+        @Override
+        public void exceptionCaught(@NotNull ChannelHandlerContext ctx, @Nullable Throwable cause) {
+            log("Exception: " + cause);
+            future.completeExceptionally(cause);
+            ctx.close();
+        }
+
+        private ByteBuf handshakeBuf() {
+            ByteBuf inner = Unpooled.buffer(); // Handshake packet
+            VarIntUtils.writeVarInt(inner, 0);
+            VarIntUtils.writeVarInt(inner, MinecraftVersion.create().protocolVersion()); // Protocol version
+            VarIntUtils.writeVarInt(inner, host.length());
+            inner.writeCharSequence(host, StandardCharsets.UTF_8);
+            inner.writeShort(port);
+            VarIntUtils.writeVarInt(inner, 1);
+            return frame(inner); // Frame the packet
+        }
+
+        private ByteBuf statusRequestBuf() {
+            ByteBuf inner = Unpooled.buffer();
+            VarIntUtils.writeVarInt(inner, 0);
+            return frame(inner);
+        }
+
+        private ByteBuf pingPacket(long time) {
+            ByteBuf inner = Unpooled.buffer();
+            VarIntUtils.writeVarInt(inner, 1);
+            inner.writeLong(time);
+            return frame(inner);
+        }
+
+        private ByteBuf frame(@NotNull ByteBuf inner) {
+            ByteBuf out = Unpooled.buffer();
+            VarIntUtils.writeVarInt(out, inner.readableBytes()); // Packet length
+            out.writeBytes(inner);
+            return out;
         }
     }
 }

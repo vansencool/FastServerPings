@@ -1,5 +1,6 @@
 package net.vansen.fastserverpings.mixin;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import net.minecraft.client.network.MultiplayerServerListPinger;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.network.NetworkingBackend;
@@ -23,11 +24,59 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 @Mixin(MultiplayerServerListPinger.class)
 public abstract class ServerPingerMixin {
     @Unique
     private static final ThreadLocal<Boolean> INVOKE_GUARD = ThreadLocal.withInitial(() -> false); // Guard for invokeAdd, to avoid recursion
+
+    @Unique
+    // Map of servers that are being pinged currently to prevent duplicate pings to the same server
+    // Causes less rate limiting when spamming refresh, and also doesn't stall for 10 seconds after spamming refresh
+    private static final ConcurrentHashMap<String, CompletableFuture<Status>> ACTIVE_PINGS = new ConcurrentHashMap<>();
+
+    @Unique
+    private static final ThreadPoolExecutor PINGER =
+            new ThreadPoolExecutor(
+                    32,
+                    32,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(256),
+                    new ThreadFactoryBuilder()
+                            .setNameFormat("FastPing #%d")
+                            .setDaemon(true)
+                            .build(),
+                    new ThreadPoolExecutor.DiscardPolicy()
+            );
+
+    @Unique
+    private static CompletableFuture<Status> pingWithRetry(
+            @NotNull String host,
+            int port,
+            @SuppressWarnings("SameParameterValue") int attempts, // TODO: make configurable
+            @NotNull Runnable onRetry
+    ) {
+        return ACTIVE_PINGS.computeIfAbsent(host + ":" + port, k ->
+                CompletableFuture.supplyAsync(() -> {
+                    Throwable last = null;
+                    for (int i = 0; i < attempts; i++) {
+                        try {
+                            return FastPing.ping(host, port).join();
+                        } catch (Throwable t) {
+                            last = t;
+                            onRetry.run();
+                        }
+                    }
+                    throw new CompletionException(last);
+                }, PINGER).whenComplete((r, e) -> ACTIVE_PINGS.remove(k))
+        );
+    }
 
     @Invoker("add")
     protected abstract void fastping$invokeAdd(
@@ -74,7 +123,6 @@ public abstract class ServerPingerMixin {
 
         ci.cancel();
 
-
         String key = entry.address;
         CacheEntry cached = FastPingCache.get(key);
 
@@ -101,8 +149,7 @@ public abstract class ServerPingerMixin {
             if (s.favicon() != null) {
                 entry.setFavicon(s.favicon().iconBytes());
             }
-        }
-        else {
+        } else {
             entry.label = Text.translatable("multiplayer.status.pinging");
             entry.ping = -1;
             entry.playerListSummary = Collections.emptyList();
@@ -163,37 +210,5 @@ public abstract class ServerPingerMixin {
             entry.ping = -1;
             PingAvgMetrics.end(startNs);
         }
-    }
-
-    @Unique
-    private static CompletableFuture<Status> pingWithRetry(
-            @NotNull String host,
-            int port,
-            int attempts, // TODO: make configurable
-            @NotNull Runnable onRetry
-    ) {
-        CompletableFuture<Status> f = new CompletableFuture<>();
-        pingAttempt(host, port, attempts, onRetry, f);
-        return f;
-    }
-
-    @Unique
-    private static void pingAttempt(
-            @NotNull String host,
-            int port,
-            int left,
-            @NotNull Runnable onRetry,
-            @NotNull CompletableFuture<Status> out
-    ) {
-        FastPing.ping(host, port).whenComplete((s, e) -> {
-            if (e == null) {
-                out.complete(s);
-            } else if (left > 1) {
-                onRetry.run();
-                pingAttempt(host, port, left - 1, onRetry, out);
-            } else {
-                out.completeExceptionally(e);
-            }
-        });
     }
 }

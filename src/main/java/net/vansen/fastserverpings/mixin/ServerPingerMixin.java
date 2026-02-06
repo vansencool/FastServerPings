@@ -1,6 +1,8 @@
 package net.vansen.fastserverpings.mixin;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.viaversion.viafabricplus.ViaFabricPlus;
+import net.minecraft.MinecraftVersion;
 import net.minecraft.client.network.MultiplayerServerListPinger;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.network.NetworkingBackend;
@@ -190,7 +192,14 @@ public abstract class ServerPingerMixin {
                 );
 
                 entry.version = Text.literal(s.version());
-                entry.protocolVersion = s.protocol();
+                try {
+                    int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
+                    // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
+                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
+                    else entry.protocolVersion = s.protocol();
+                } catch (Throwable t) {
+                    entry.protocolVersion = s.protocol();
+                }
                 if (s.favicon() != null) {
                     entry.setFavicon(s.favicon().iconBytes());
                 }

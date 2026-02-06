@@ -1,10 +1,10 @@
 package net.vansen.fastserverpings.pipeline;
 
-
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
+import com.viaversion.viafabricplus.ViaFabricPlus;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -259,7 +259,14 @@ public final class FastPing {
         private ByteBuf handshakeBuf() {
             ByteBuf inner = Unpooled.buffer(); // Handshake packet
             VarIntUtils.writeVarInt(inner, 0);
-            VarIntUtils.writeVarInt(inner, MinecraftVersion.create().protocolVersion()); // Protocol version
+
+            try {
+                VarIntUtils.writeVarInt(inner, ViaFabricPlus.getImpl().getTargetVersion().getVersion()); // Compatibility with ViaFabricPlus if present
+            }
+            catch (Throwable e) {
+                VarIntUtils.writeVarInt(inner, MinecraftVersion.create().protocolVersion()); // Protocol version
+            }
+
             VarIntUtils.writeVarInt(inner, host.length());
             inner.writeCharSequence(host, StandardCharsets.UTF_8);
             inner.writeShort(port);

@@ -263,7 +263,7 @@ public final class FastPing {
                 VarIntUtils.writeVarInt(inner, ViaFabricPlus.getImpl().getTargetVersion().getVersion()); // Compatibility with ViaFabricPlus if present
             }
             catch (Throwable e) {
-                VarIntUtils.writeVarInt(inner, MinecraftVersion.create().getProtocolVersion()); // Protocol version
+                VarIntUtils.writeVarInt(inner, MinecraftVersion.create().protocolVersion()); // Protocol version
             }
 
             VarIntUtils.writeVarInt(inner, host.length());

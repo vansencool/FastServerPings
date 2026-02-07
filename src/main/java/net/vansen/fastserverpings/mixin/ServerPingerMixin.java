@@ -192,7 +192,7 @@ public abstract class ServerPingerMixin {
                 try {
                     int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
                     // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
-                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().getProtocolVersion();
+                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
                     else entry.protocolVersion = s.protocol();
                 } catch (Throwable t) {
                     entry.protocolVersion = s.protocol();

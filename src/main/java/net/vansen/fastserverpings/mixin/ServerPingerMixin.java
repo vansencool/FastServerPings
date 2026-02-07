@@ -5,7 +5,6 @@ import com.viaversion.viafabricplus.ViaFabricPlus;
 import net.minecraft.MinecraftVersion;
 import net.minecraft.client.network.MultiplayerServerListPinger;
 import net.minecraft.client.network.ServerInfo;
-import net.minecraft.network.NetworkingBackend;
 import net.minecraft.screen.ScreenTexts;
 import net.minecraft.server.ServerMetadata;
 import net.minecraft.text.Text;
@@ -84,8 +83,7 @@ public abstract class ServerPingerMixin {
     protected abstract void fastping$invokeAdd(
             ServerInfo entry,
             Runnable saver,
-            Runnable pingCallback,
-            NetworkingBackend backend
+            Runnable pingCallback
     );
 
     @Inject(
@@ -97,7 +95,6 @@ public abstract class ServerPingerMixin {
             ServerInfo entry,
             Runnable saver,
             Runnable pingCallback,
-            NetworkingBackend backend,
             CallbackInfo ci
     ) {
         if (INVOKE_GUARD.get()) {
@@ -114,7 +111,7 @@ public abstract class ServerPingerMixin {
 
             try {
                 INVOKE_GUARD.set(true);
-                fastping$invokeAdd(entry, saver, wrapped, backend);
+                fastping$invokeAdd(entry, saver, wrapped);
             } finally {
                 INVOKE_GUARD.remove();
             }
@@ -195,7 +192,7 @@ public abstract class ServerPingerMixin {
                 try {
                     int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
                     // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
-                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
+                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().getProtocolVersion();
                     else entry.protocolVersion = s.protocol();
                 } catch (Throwable t) {
                     entry.protocolVersion = s.protocol();

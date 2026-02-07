@@ -35,7 +35,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-@SuppressWarnings("deprecation")
 public final class FastPing {
 
     private static final EventLoopGroup GROUP = new NioEventLoopGroup(4); // Backwards compatibility with older Netty versions

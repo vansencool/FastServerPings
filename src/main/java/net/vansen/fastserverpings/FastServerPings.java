@@ -27,8 +27,8 @@ public class FastServerPings implements ClientModInitializer {
                                                     .append(Text.literal("Add predefined servers ").formatted(Formatting.WHITE))
                                                     .append(Text.literal("[Confirm]").formatted(Formatting.GREEN, Formatting.BOLD)
                                                             .styled(s -> s
-                                                                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/fastping addservers confirm"))
-                                                                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                                                    .withClickEvent(new ClickEvent.RunCommand("/fastping addservers confirm"))
+                                                                    .withHoverEvent(new HoverEvent.ShowText(
                                                                             Text.literal("Click to add predefined servers").formatted(Formatting.GRAY)
                                                                     )))),
                                             false
@@ -60,8 +60,8 @@ public class FastServerPings implements ClientModInitializer {
                                                     .append(Text.literal("Remove predefined servers ").formatted(Formatting.WHITE))
                                                     .append(Text.literal("[Confirm]").formatted(Formatting.RED, Formatting.BOLD)
                                                             .styled(s -> s
-                                                                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/fastping removeservers confirm"))
-                                                                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                                                    .withClickEvent(new ClickEvent.RunCommand("/fastping removeservers confirm"))
+                                                                    .withHoverEvent(new HoverEvent.ShowText(
                                                                             Text.literal("Click to remove predefined servers").formatted(Formatting.GRAY)
                                                                     )))),
                                             false
@@ -82,8 +82,8 @@ public class FastServerPings implements ClientModInitializer {
                                                     .append(Text.literal("Clear ALL servers ").formatted(Formatting.WHITE))
                                                     .append(Text.literal("[Confirm]").formatted(Formatting.DARK_RED, Formatting.BOLD)
                                                             .styled(s -> s
-                                                                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/fastping clearallservers confirm"))
-                                                                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                                                    .withClickEvent(new ClickEvent.RunCommand("/fastping clearallservers confirm"))
+                                                                    .withHoverEvent(new HoverEvent.ShowText(
                                                                             Text.literal("This will delete every server").formatted(Formatting.RED)
                                                                     )))),
                                             false

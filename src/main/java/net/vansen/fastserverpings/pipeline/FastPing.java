@@ -71,7 +71,7 @@ public final class FastPing {
                     }
                 });
 
-        b.connect(new InetSocketAddress(resolved.host(), resolved.port())) // Connect to server
+        b.connect(InetSocketAddress.createUnresolved(resolved.host(), resolved.port())) // Connect to server
                 .addListener((ChannelFutureListener) f -> {
                     if (!f.isSuccess()) {
                         log("Connect failed: " + f.cause());

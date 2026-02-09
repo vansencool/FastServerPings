@@ -6,15 +6,6 @@ version = project.mod_version
 group = project.maven_group
 
 repositories {
-    maven { url = "https://repo.viaversion.com" }
-    maven { url = "https://maven.lenni0451.net/everything" }
-    maven { url = "https://repo.opencollab.dev/maven-snapshots" }
-    maven {
-        url = "https://jitpack.io"
-        content {
-            includeGroup("com.github.Oryxel")
-        }
-    }
 }
 
 dependencies {
@@ -22,8 +13,6 @@ dependencies {
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-
-    modCompileOnly("com.viaversion:viafabricplus-api:4.0.0")
 }
 
 processResources {

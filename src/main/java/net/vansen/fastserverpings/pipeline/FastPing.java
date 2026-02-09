@@ -4,7 +4,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
-import com.viaversion.viafabricplus.ViaFabricPlus;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -259,12 +258,7 @@ public final class FastPing {
             ByteBuf inner = Unpooled.buffer(); // Handshake packet
             VarIntUtils.writeVarInt(inner, 0);
 
-            try {
-                VarIntUtils.writeVarInt(inner, ViaFabricPlus.getImpl().getTargetVersion().getVersion()); // Compatibility with ViaFabricPlus if present
-            }
-            catch (Throwable e) {
-                VarIntUtils.writeVarInt(inner, MinecraftVersion.create().getProtocolVersion()); // Protocol version
-            }
+            VarIntUtils.writeVarInt(inner, MinecraftVersion.create().getProtocolVersion()); // Protocol version
 
             VarIntUtils.writeVarInt(inner, host.length());
             inner.writeCharSequence(host, StandardCharsets.UTF_8);

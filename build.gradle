@@ -23,7 +23,6 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-    modRuntimeOnly("com.viaversion:viafabricplus:4.0.0")
     modCompileOnly("com.viaversion:viafabricplus-api:4.0.0")
 }
 

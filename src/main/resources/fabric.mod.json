@@ -4,7 +4,8 @@
   "version": "${version}",
   "name": "FastServerPings",
   "description": "Rewritten server ping pipeline using optimized Netty I/O, reduced overhead, and SWR caching for faster server lists on Fabric.",
-  "authors": [],
+  "authors": ["vansen"],
+  "icon": "assets/icon.png",
   "contact": {
     "repo": "https://github.com/vansencool/FastServerPings"
   },

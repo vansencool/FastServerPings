@@ -18,10 +18,10 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.ScheduledFuture;
-import net.minecraft.MinecraftVersion;
-import net.minecraft.server.ServerMetadata;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextCodecs;
+import net.minecraft.DetectedVersion;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
+import net.minecraft.network.protocol.status.ServerStatus;
 import net.vansen.fastserverpings.pipeline.srv.SrvResolver;
 import net.vansen.fastserverpings.pipeline.status.Status;
 import net.vansen.fastserverpings.pipeline.utils.VarIntUtils;
@@ -87,7 +87,7 @@ public final class FastPing {
     private static Status parse(@NotNull String json, long ping) {
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
-        Text motd = parseMotd(root);
+        Component motd = parseMotd(root);
 
         JsonObject versionObj = root.getAsJsonObject("version");
         String version = versionObj != null && versionObj.has("name")
@@ -107,9 +107,9 @@ public final class FastPing {
                 ? players.get("max").getAsInt()
                 : 0;
 
-        ServerMetadata.Favicon favicon = null;
+        ServerStatus.Favicon favicon = null;
         if (root.has("favicon")) {
-            favicon = ServerMetadata.Favicon.CODEC
+            favicon = ServerStatus.Favicon.CODEC
                     .parse(JsonOps.INSTANCE, root.get("favicon"))
                     .result()
                     .orElse(null);
@@ -126,17 +126,17 @@ public final class FastPing {
         );
     }
 
-    private static Text parseMotd(@NotNull JsonObject root) {
+    private static Component parseMotd(@NotNull JsonObject root) {
         try {
             JsonElement desc = root.get("description");
-            if (desc == null) return Text.literal("");
-            return TextCodecs.CODEC
+            if (desc == null) return Component.literal("");
+            return ComponentSerialization.CODEC
                     .parse(JsonOps.INSTANCE, desc)
                     .result()
-                    .orElse(Text.empty());
+                    .orElse(Component.empty());
         } catch (Exception e) {
             log("MOTD parse failed");
-            return Text.literal("");
+            return Component.literal("");
         }
     }
 
@@ -262,9 +262,8 @@ public final class FastPing {
 
             try {
                 VarIntUtils.writeVarInt(inner, ViaFabricPlus.getImpl().getTargetVersion().getVersion()); // Compatibility with ViaFabricPlus if present
-            }
-            catch (Throwable e) {
-                VarIntUtils.writeVarInt(inner, MinecraftVersion.create().protocolVersion()); // Protocol version
+            } catch (Throwable e) {
+                VarIntUtils.writeVarInt(inner, DetectedVersion.tryDetectVersion().protocolVersion()); // Protocol version
             }
 
             VarIntUtils.writeVarInt(inner, host.length());

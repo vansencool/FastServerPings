@@ -2,14 +2,14 @@ package net.vansen.fastserverpings.mixin;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.viaversion.viafabricplus.ViaFabricPlus;
-import net.minecraft.MinecraftVersion;
-import net.minecraft.client.network.MultiplayerServerListPinger;
-import net.minecraft.client.network.ServerInfo;
-import net.minecraft.network.NetworkingBackend;
-import net.minecraft.screen.ScreenTexts;
-import net.minecraft.server.ServerMetadata;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.DetectedVersion;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.multiplayer.ServerStatusPinger;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.status.ServerStatus;
+import net.minecraft.server.network.EventLoopGroupHolder;
 import net.vansen.fastserverpings.cache.CacheEntry;
 import net.vansen.fastserverpings.cache.FastPingCache;
 import net.vansen.fastserverpings.metrics.PingAvgMetrics;
@@ -32,7 +32,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-@Mixin(MultiplayerServerListPinger.class)
+@Mixin(ServerStatusPinger.class)
 public abstract class ServerPingerMixin {
     @Unique
     private static final ThreadLocal<Boolean> INVOKE_GUARD = ThreadLocal.withInitial(() -> false); // Guard for invokeAdd, to avoid recursion
@@ -80,24 +80,24 @@ public abstract class ServerPingerMixin {
         );
     }
 
-    @Invoker("add")
+    @Invoker("pingServer")
     protected abstract void fastping$invokeAdd(
-            ServerInfo entry,
+            ServerData entry,
             Runnable saver,
             Runnable pingCallback,
-            NetworkingBackend backend
+            EventLoopGroupHolder backend
     );
 
     @Inject(
-            method = "add",
+            method = "pingServer",
             at = @At("HEAD"),
             cancellable = true
     )
     private void fastping$add(
-            ServerInfo entry,
+            ServerData entry,
             Runnable saver,
             Runnable pingCallback,
-            NetworkingBackend backend,
+            EventLoopGroupHolder backend,
             CallbackInfo ci
     ) {
         if (INVOKE_GUARD.get()) {
@@ -125,40 +125,40 @@ public abstract class ServerPingerMixin {
 
         ci.cancel();
 
-        String key = entry.address;
+        String key = entry.ip;
         CacheEntry cached = FastPingCache.get(key);
 
         if (cached != null && FastPingCache.fresh(cached)) { // SWR: stale-while-revalidate
             var s = cached.status();
 
-            entry.label = s.motd();
+            entry.motd = s.motd();
             entry.ping = s.ping();
 
-            entry.playerCountLabel =
-                    MultiplayerServerListPinger.createPlayerCountText(
+            entry.status =
+                    ServerStatusPinger.formatPlayerCount(
                             s.online(),
                             s.max()
                     );
 
-            entry.players = new ServerMetadata.Players(
+            entry.players = new ServerStatus.Players(
                     s.max(),
                     s.online(),
                     List.of()
             );
 
-            entry.version = Text.literal(s.version());
-            entry.protocolVersion = s.protocol();
+            entry.version = Component.literal(s.version());
+            entry.protocol = s.protocol();
             if (s.favicon() != null) {
-                entry.setFavicon(s.favicon().iconBytes());
+                entry.setIconBytes(s.favicon().iconBytes());
             }
         } else {
-            entry.label = Text.translatable("multiplayer.status.pinging");
+            entry.motd = Component.translatable("multiplayer.status.pinging");
             entry.ping = -1;
-            entry.playerListSummary = Collections.emptyList();
+            entry.playerList = Collections.emptyList();
         }
 
         try {
-            String addr = entry.address;
+            String addr = entry.ip;
             String host;
             int port;
 
@@ -172,50 +172,50 @@ public abstract class ServerPingerMixin {
             }
 
             pingWithRetry(host, port, 3, () -> { // Retry callback
-                entry.label = Text.literal("Failed to ping server, retrying...").formatted(Formatting.YELLOW);
+                entry.motd = Component.literal("Failed to ping server, retrying...").withStyle(ChatFormatting.YELLOW);
                 entry.ping = -1;
             }).thenAccept(s -> { // Success
                 FastPingCache.put(key, s);
-                entry.label = s.motd();
+                entry.motd = s.motd();
                 entry.ping = s.ping();
 
-                entry.playerCountLabel =
-                        MultiplayerServerListPinger.createPlayerCountText(
+                entry.status =
+                        ServerStatusPinger.formatPlayerCount(
                                 s.online(),
                                 s.max()
                         );
 
-                entry.players = new ServerMetadata.Players(
+                entry.players = new ServerStatus.Players(
                         s.max(),
                         s.online(),
                         List.of()
                 );
 
-                entry.version = Text.literal(s.version());
+                entry.version = Component.literal(s.version());
                 try {
                     int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
                     // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
-                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
-                    else entry.protocolVersion = s.protocol();
+                    if (protocol == s.protocol()) entry.protocol = DetectedVersion.tryDetectVersion().protocolVersion();
+                    else entry.protocol = s.protocol();
                 } catch (Throwable t) {
-                    entry.protocolVersion = s.protocol();
+                    entry.protocol = s.protocol();
                 }
                 if (s.favicon() != null) {
-                    entry.setFavicon(s.favicon().iconBytes());
+                    entry.setIconBytes(s.favicon().iconBytes());
                 }
 
                 PingAvgMetrics.end(startNs);
                 pingCallback.run();
             }).exceptionally(e -> {
-                entry.label = Text.translatable("multiplayer.status.cannot_connect").withColor(-65536);
-                entry.playerCountLabel = ScreenTexts.EMPTY;
+                entry.motd = Component.translatable("multiplayer.status.cannot_connect").withColor(-65536);
+                entry.status = CommonComponents.EMPTY;
                 entry.ping = -1;
                 PingAvgMetrics.end(startNs);
                 return null;
             });
         } catch (Throwable t) {
-            entry.label = Text.translatable("multiplayer.status.cannot_connect").withColor(-65536);
-            entry.playerCountLabel = ScreenTexts.EMPTY;
+            entry.motd = Component.translatable("multiplayer.status.cannot_connect").withColor(-65536);
+            entry.status = CommonComponents.EMPTY;
             entry.ping = -1;
             PingAvgMetrics.end(startNs);
         }

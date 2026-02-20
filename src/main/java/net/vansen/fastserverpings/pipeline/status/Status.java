@@ -1,7 +1,7 @@
 package net.vansen.fastserverpings.pipeline.status;
 
-import net.minecraft.server.ServerMetadata;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.status.ServerStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,12 +17,12 @@ import org.jetbrains.annotations.Nullable;
  * @param favicon  the server's favicon
  */
 public record Status(
-        @NotNull Text motd,
+        @NotNull Component motd,
         int online,
         int max,
         @NotNull String version,
         int protocol,
         long ping,
-        @Nullable ServerMetadata.Favicon favicon
+        @Nullable ServerStatus.Favicon favicon
 ) {
 }

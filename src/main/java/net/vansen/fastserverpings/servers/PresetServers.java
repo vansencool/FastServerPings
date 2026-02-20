@@ -1,8 +1,8 @@
 package net.vansen.fastserverpings.servers;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ServerInfo;
-import net.minecraft.client.option.ServerList;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.multiplayer.ServerList;
 
 public class PresetServers {
     public static final String[][] SERVERS = {
@@ -74,37 +74,37 @@ public class PresetServers {
     };
 
     public static void addServers() {
-        ServerList list = new ServerList(MinecraftClient.getInstance());
+        ServerList list = new ServerList(Minecraft.getInstance());
 
-        list.loadFile();
+        list.load();
 
         for (String[] s : SERVERS) {
             String addr = s[0] + ":" + s[1];
 
             boolean exists = false;
             for (int i = 0; i < list.size(); i++) {
-                if (list.get(i).address.equalsIgnoreCase(addr)) {
+                if (list.get(i).ip.equalsIgnoreCase(addr)) {
                     exists = true;
                     break;
                 }
             }
 
             if (!exists) {
-                list.add(new ServerInfo(s[0], addr, ServerInfo.ServerType.OTHER), false);
+                list.add(new ServerData(s[0], addr, ServerData.Type.OTHER), false);
             }
         }
 
-        list.saveFile();
+        list.save();
     }
 
     public static void removeServers() {
-        ServerList list = new ServerList(MinecraftClient.getInstance());
+        ServerList list = new ServerList(Minecraft.getInstance());
 
-        list.loadFile();
+        list.load();
 
         for (int i = list.size() - 1; i >= 0; i--) {
-            ServerInfo info = list.get(i);
-            String addr = info.address;
+            ServerData info = list.get(i);
+            String addr = info.ip;
 
             for (String[] s : SERVERS) {
                 if (addr.equalsIgnoreCase(s[0] + ":" + s[1])) {
@@ -114,6 +114,6 @@ public class PresetServers {
             }
         }
 
-        list.saveFile();
+        list.save();
     }
 }

@@ -1,7 +1,7 @@
 package net.vansen.fastserverpings.metrics;
 
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.atomic.LongAdder;
@@ -25,26 +25,25 @@ public final class PingAvgMetrics {
         USE_FASTPING = !USE_FASTPING;
     }
 
-    public static void sendAndReset(@NotNull PlayerEntity p) {
+    public static void sendAndReset(@NotNull Player p) {
         long c = count.sumThenReset();
         long t = totalNs.sumThenReset();
 
         if (c == 0) {
-            p.sendMessage(Text.literal("[PingAvgMetrics] no data"), false);
+            p.sendSystemMessage(Component.literal("[PingAvgMetrics] no data"));
             return;
         }
 
         double avgMs = (t / (double) c) / 1_000_000.0;
 
-        p.sendMessage(
-                Text.literal(
+        p.sendSystemMessage(
+                Component.literal(
                         "[PingAvgMetrics] " +
                                 (USE_FASTPING ? "FASTPING" : "VANILLA") +
                                 " avg per-server = " +
                                 String.format("%.2f", avgMs) +
                                 " ms (" + c + " servers)"
-                ),
-                false
+                )
         );
     }
 }

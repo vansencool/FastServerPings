@@ -8,7 +8,6 @@ import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.vansen.fastserverpings.metrics.PingAvgMetrics;
 import net.vansen.fastserverpings.pipeline.FastPing;
 import net.vansen.fastserverpings.servers.PresetServers;
 
@@ -102,31 +101,12 @@ public class FastServerPings implements ClientModInitializer {
                                                     .append(Text.literal("All servers cleared").formatted(Formatting.DARK_RED)), false);
                                             return 1;
                                         })))
-                        .then(literal("togglefastping")
-                                .executes(c -> {
-                                    PingAvgMetrics.toggleEnable();
-                                    c.getSource().getPlayer().sendMessage(
-                                            Text.literal("[PingAvgMetrics] ").formatted(Formatting.LIGHT_PURPLE)
-                                                    .append(Text.literal("Now using ").formatted(Formatting.WHITE))
-                                                    .append(Text.literal(PingAvgMetrics.USE_FASTPING ? "FastPing" : "Vanilla").formatted(PingAvgMetrics.USE_FASTPING ? Formatting.GREEN : Formatting.YELLOW))
-                                                    .append(Text.literal(" for server pinging").formatted(Formatting.WHITE)),
-                                            false
-                                    );
-                                    return 1;
-                                }))
-                        .then(literal("pingmetrics")
-                                .executes(c -> {
-                                    PingAvgMetrics.sendAndReset(c.getSource().getPlayer());
-                                    return 1;
-                                }))
                         .then(literal("help")
                                 .executes(c -> {
                                     var p = c.getSource().getPlayer();
                                     p.sendMessage(Text.literal("/fastping addservers").formatted(Formatting.GRAY), false);
                                     p.sendMessage(Text.literal("/fastping removeservers").formatted(Formatting.GRAY), false);
                                     p.sendMessage(Text.literal("/fastping clearallservers").formatted(Formatting.GRAY), false);
-                                    p.sendMessage(Text.literal("/fastping togglefastping").formatted(Formatting.GRAY), false);
-                                    p.sendMessage(Text.literal("/fastping pingmetrics").formatted(Formatting.GRAY), false);
                                     return 1;
                                 }))
         ));

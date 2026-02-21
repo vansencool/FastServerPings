@@ -90,7 +90,7 @@ public class PresetServers {
             }
 
             if (!exists) {
-                list.add(new ServerInfo(s[0], addr, ServerInfo.ServerType.OTHER), false);
+                list.add(new ServerInfo(s[0], addr, false), false);
             }
         }
 

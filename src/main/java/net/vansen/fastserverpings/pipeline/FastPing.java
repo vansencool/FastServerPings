@@ -20,7 +20,6 @@ import io.netty.util.concurrent.ScheduledFuture;
 import net.minecraft.MinecraftVersion;
 import net.minecraft.server.ServerMetadata;
 import net.minecraft.text.Text;
-import net.minecraft.text.TextCodecs;
 import net.vansen.fastserverpings.pipeline.srv.SrvResolver;
 import net.vansen.fastserverpings.pipeline.status.Status;
 import net.vansen.fastserverpings.pipeline.utils.VarIntUtils;
@@ -128,10 +127,7 @@ public final class FastPing {
         try {
             JsonElement desc = root.get("description");
             if (desc == null) return Text.literal("");
-            return TextCodecs.CODEC
-                    .parse(JsonOps.INSTANCE, desc)
-                    .result()
-                    .orElse(Text.empty());
+            return Text.Serializer.fromJson(desc);
         } catch (Exception e) {
             log("MOTD parse failed");
             return Text.literal("");

@@ -9,13 +9,11 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.vansen.fastserverpings.cache.CacheEntry;
 import net.vansen.fastserverpings.cache.FastPingCache;
-import net.vansen.fastserverpings.metrics.PingAvgMetrics;
 import net.vansen.fastserverpings.pipeline.FastPing;
 import net.vansen.fastserverpings.pipeline.status.Status;
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -31,9 +29,6 @@ import java.util.concurrent.TimeUnit;
 
 @Mixin(MultiplayerServerListPinger.class)
 public abstract class ServerPingerMixin {
-    @Unique
-    private static final ThreadLocal<Boolean> INVOKE_GUARD = ThreadLocal.withInitial(() -> false); // Guard for invokeAdd, to avoid recursion
-
     @Unique
     // Map of servers that are being pinged currently to prevent duplicate pings to the same server
     // Causes less rate limiting when spamming refresh, and also doesn't stall for 10 seconds after spamming refresh
@@ -77,47 +72,14 @@ public abstract class ServerPingerMixin {
         );
     }
 
-    @Invoker("add")
-    protected abstract void fastping$invokeAdd(
-            ServerInfo entry,
-            Runnable saver,
-            Runnable pingCallback
-    );
-
     @Inject(
             method = "add",
             at = @At("HEAD"),
             cancellable = true
     )
     private void fastping$add(
-            ServerInfo entry,
-            Runnable saver,
-            Runnable pingCallback,
-            CallbackInfo ci
+            ServerInfo entry, Runnable saver, CallbackInfo ci
     ) {
-        if (INVOKE_GUARD.get()) {
-            return;
-        }
-
-        long startNs = PingAvgMetrics.start();
-
-        if (!PingAvgMetrics.USE_FASTPING) {
-            Runnable wrapped = () -> {
-                PingAvgMetrics.end(startNs);
-                pingCallback.run();
-            };
-
-            try {
-                INVOKE_GUARD.set(true);
-                fastping$invokeAdd(entry, saver, wrapped);
-            } finally {
-                INVOKE_GUARD.remove();
-            }
-
-            ci.cancel();
-            return;
-        }
-
         ci.cancel();
 
         String key = entry.address;
@@ -129,11 +91,7 @@ public abstract class ServerPingerMixin {
             entry.label = s.motd();
             entry.ping = s.ping();
 
-            entry.playerCountLabel =
-                    MultiplayerServerListPinger.createPlayerCountText(
-                            s.online(),
-                            s.max()
-                    );
+            entry.playerCountLabel = Text.literal(Integer.toString(s.online())).append(Text.literal("/").formatted(Formatting.DARK_GRAY)).append(Integer.toString(s.max())).formatted(Formatting.GRAY);
 
             entry.players = new ServerMetadata.Players(
                     s.max(),
@@ -174,11 +132,7 @@ public abstract class ServerPingerMixin {
                 entry.label = s.motd();
                 entry.ping = s.ping();
 
-                entry.playerCountLabel =
-                        MultiplayerServerListPinger.createPlayerCountText(
-                                s.online(),
-                                s.max()
-                        );
+                entry.playerCountLabel = Text.literal(Integer.toString(s.online())).append(Text.literal("/").formatted(Formatting.DARK_GRAY)).append(Integer.toString(s.max())).formatted(Formatting.GRAY);
 
                 entry.players = new ServerMetadata.Players(
                         s.max(),
@@ -191,21 +145,16 @@ public abstract class ServerPingerMixin {
                 if (s.favicon() != null) {
                     entry.setFavicon(s.favicon().iconBytes());
                 }
-
-                PingAvgMetrics.end(startNs);
-                pingCallback.run();
             }).exceptionally(e -> {
-                entry.label = Text.translatable("multiplayer.status.cannot_connect").withColor(-65536);
+                entry.label = Text.translatable("multiplayer.status.cannot_connect").formatted(Formatting.RED);
                 entry.playerCountLabel = ScreenTexts.EMPTY;
                 entry.ping = -1;
-                PingAvgMetrics.end(startNs);
                 return null;
             });
         } catch (Throwable t) {
-            entry.label = Text.translatable("multiplayer.status.cannot_connect").withColor(-65536);
+            entry.label = Text.translatable("multiplayer.status.cannot_connect").formatted(Formatting.RED);
             entry.playerCountLabel = ScreenTexts.EMPTY;
             entry.ping = -1;
-            PingAvgMetrics.end(startNs);
         }
     }
 }

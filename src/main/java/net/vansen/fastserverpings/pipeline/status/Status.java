@@ -1,9 +1,12 @@
 package net.vansen.fastserverpings.pipeline.status;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.server.ServerMetadata;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * A record representing the status of a Minecraft server.
@@ -15,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
  * @param protocol the protocol version of the server
  * @param ping     the ping time to the server in milliseconds
  * @param favicon  the server's favicon
+ * @param sample   the sample player names shown on hover
  */
 public record Status(
         @NotNull Text motd,
@@ -23,6 +27,7 @@ public record Status(
         @NotNull String version,
         int protocol,
         long ping,
-        @Nullable ServerMetadata.Favicon favicon
+        @Nullable ServerMetadata.Favicon favicon,
+        @NotNull List<GameProfile> sample
 ) {
 }

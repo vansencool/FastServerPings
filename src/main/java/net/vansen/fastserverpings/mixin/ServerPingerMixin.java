@@ -1,6 +1,7 @@
 package net.vansen.fastserverpings.mixin;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.mojang.authlib.GameProfile;
 import com.viaversion.viafabricplus.ViaFabricPlus;
 import net.minecraft.MinecraftVersion;
 import net.minecraft.client.network.MultiplayerServerListPinger;
@@ -22,8 +23,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -77,6 +80,38 @@ public abstract class ServerPingerMixin {
                     throw new CompletionException(last);
                 }, PINGER).whenComplete((r, e) -> ACTIVE_PINGS.remove(k))
         );
+    }
+
+    @Unique
+    private static List<Text> fastping$buildPlayerListSummary(@NotNull Status s) {
+        List<Text> list = new ArrayList<>(s.sample().size() + 1);
+        for (String name : s.sample()) {
+            list.add(name.isEmpty()
+                    ? Text.translatable("multiplayer.status.anonymous_player")
+                    : Text.literal(name));
+        }
+        if (s.sample().size() < s.online()) {
+            list.add(Text.translatable("multiplayer.status.and_more", s.online() - s.sample().size()));
+        }
+        return list;
+    }
+
+    @Unique
+    private static ServerMetadata.Players fastping$createPlayers(int max, int online, List<String> names) {
+        if (names.isEmpty()) return new ServerMetadata.Players(max, online, List.of());
+        try {
+            List<Object> sample = new ArrayList<>(names.size());
+            try {
+                Class<?> pceClass = Class.forName("net.minecraft.server.PlayerConfigEntry");
+                var ctor = pceClass.getConstructor(UUID.class, String.class);
+                for (String name : names) sample.add(ctor.newInstance(UUID.randomUUID(), name));
+            } catch (ClassNotFoundException e) {
+                for (String name : names) sample.add(new GameProfile(UUID.randomUUID(), name));
+            }
+            return ServerMetadata.Players.class.getDeclaredConstructor(int.class, int.class, List.class).newInstance(max, online, sample);
+        } catch (Exception e) {
+            return new ServerMetadata.Players(max, online, List.of());
+        }
     }
 
     @Invoker("add")
@@ -137,11 +172,8 @@ public abstract class ServerPingerMixin {
                             s.max()
                     );
 
-            entry.players = new ServerMetadata.Players(
-                    s.max(),
-                    s.online(),
-                    List.of()
-            );
+            entry.players = fastping$createPlayers(s.max(), s.online(), s.sample());
+            if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
 
             entry.version = Text.literal(s.version());
             entry.protocolVersion = s.protocol();
@@ -182,11 +214,8 @@ public abstract class ServerPingerMixin {
                                 s.max()
                         );
 
-                entry.players = new ServerMetadata.Players(
-                        s.max(),
-                        s.online(),
-                        List.of()
-                );
+                entry.players = fastping$createPlayers(s.max(), s.online(), s.sample());
+                if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
 
                 entry.version = Text.literal(s.version());
                 try {

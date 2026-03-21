@@ -3,6 +3,7 @@ package net.vansen.fastserverpings.pipeline;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.minecraft.server.PlayerConfigEntry;
 import com.mojang.serialization.JsonOps;
 import com.viaversion.viafabricplus.ViaFabricPlus;
 import io.netty.bootstrap.Bootstrap;
@@ -31,6 +32,9 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -107,6 +111,22 @@ public final class FastPing {
                 ? players.get("max").getAsInt()
                 : 0;
 
+        List<PlayerConfigEntry> sample = new ArrayList<>();
+        if (players != null && players.has("sample")) {
+            for (JsonElement element : players.getAsJsonArray("sample")) {
+                JsonObject playerObj = element.getAsJsonObject();
+                String name = playerObj.has("name") ? playerObj.get("name").getAsString() : "";
+                try {
+                    PlayerConfigEntry entry = PlayerConfigEntry.read(playerObj);
+                    if (entry != null) {
+                        sample.add(entry);
+                    } else throw new IllegalArgumentException("Invalid");
+                } catch (IllegalArgumentException ignored) {
+                    sample.add(new PlayerConfigEntry(UUID.randomUUID(), name));
+                }
+            }
+        }
+
         ServerMetadata.Favicon favicon = null;
         if (root.has("favicon")) {
             favicon = ServerMetadata.Favicon.CODEC
@@ -122,7 +142,8 @@ public final class FastPing {
                 version,
                 protocol,
                 ping,
-                favicon
+                favicon,
+                sample
         );
     }
 

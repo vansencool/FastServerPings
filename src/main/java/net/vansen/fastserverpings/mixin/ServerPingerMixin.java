@@ -23,6 +23,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -78,6 +79,21 @@ public abstract class ServerPingerMixin {
                     throw new CompletionException(last);
                 }, PINGER).whenComplete((r, e) -> ACTIVE_PINGS.remove(k))
         );
+    }
+
+    @Unique
+    private static List<Text> fastping$buildPlayerListSummary(@NotNull Status s) {
+        List<Text> list = new ArrayList<>(s.sample().size() + 1);
+        for (var p : s.sample()) {
+            String name = p.name();
+            list.add(name == null || name.isEmpty()
+                    ? Text.translatable("multiplayer.status.anonymous_player")
+                    : Text.literal(name));
+        }
+        if (s.sample().size() < s.online()) {
+            list.add(Text.translatable("multiplayer.status.and_more", s.online() - s.sample().size()));
+        }
+        return list;
     }
 
     @Invoker("add")
@@ -143,8 +159,9 @@ public abstract class ServerPingerMixin {
             entry.players = new ServerMetadata.Players(
                     s.max(),
                     s.online(),
-                    List.of()
+                    s.sample()
             );
+            if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
 
             entry.version = Text.literal(s.version());
             entry.protocolVersion = s.protocol();
@@ -188,8 +205,9 @@ public abstract class ServerPingerMixin {
                 entry.players = new ServerMetadata.Players(
                         s.max(),
                         s.online(),
-                        List.of()
+                        s.sample()
                 );
+                if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
 
                 entry.version = Text.literal(s.version());
                 try {

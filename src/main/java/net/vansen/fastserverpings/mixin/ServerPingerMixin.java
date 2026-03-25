@@ -86,9 +86,7 @@ public abstract class ServerPingerMixin {
         List<Text> list = new ArrayList<>(s.sample().size() + 1);
         for (var p : s.sample()) {
             String name = p.name();
-            list.add(name == null || name.isEmpty()
-                    ? Text.translatable("multiplayer.status.anonymous_player")
-                    : Text.literal(name));
+            list.add(Text.literal(name == null ? "" : name));
         }
         if (s.sample().size() < s.online()) {
             list.add(Text.translatable("multiplayer.status.and_more", s.online() - s.sample().size()));

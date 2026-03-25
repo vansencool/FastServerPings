@@ -86,9 +86,7 @@ public abstract class ServerPingerMixin {
     private static List<Text> fastping$buildPlayerListSummary(@NotNull Status s) {
         List<Text> list = new ArrayList<>(s.sample().size() + 1);
         for (String name : s.sample()) {
-            list.add(name.isEmpty()
-                    ? Text.translatable("multiplayer.status.anonymous_player")
-                    : Text.literal(name));
+            list.add(Text.literal(name == null ? "" : name));
         }
         if (s.sample().size() < s.online()) {
             list.add(Text.translatable("multiplayer.status.and_more", s.online() - s.sample().size()));

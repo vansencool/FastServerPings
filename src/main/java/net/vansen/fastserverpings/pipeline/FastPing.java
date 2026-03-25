@@ -143,7 +143,8 @@ public final class FastPing {
                 protocol,
                 ping,
                 favicon,
-                sample
+                sample,
+                players != null
         );
     }
 

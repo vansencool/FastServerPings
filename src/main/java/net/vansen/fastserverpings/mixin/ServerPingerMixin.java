@@ -7,6 +7,7 @@ import net.minecraft.client.network.MultiplayerServerListPinger;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.network.NetworkingBackend;
 import net.minecraft.screen.ScreenTexts;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerMetadata;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -85,8 +86,9 @@ public abstract class ServerPingerMixin {
     private static List<Text> fastping$buildPlayerListSummary(@NotNull Status s) {
         List<Text> list = new ArrayList<>(s.sample().size() + 1);
         for (var p : s.sample()) {
-            String name = p.name();
-            list.add(Text.literal(name == null ? "" : name));
+            list.add(p.equals(MinecraftServer.ANONYMOUS_PLAYER_PROFILE)
+                    ? Text.translatable("multiplayer.status.anonymous_player")
+                    : Text.literal(p.name()));
         }
         if (s.sample().size() < s.online()) {
             list.add(Text.translatable("multiplayer.status.and_more", s.online() - s.sample().size()));
@@ -148,23 +150,40 @@ public abstract class ServerPingerMixin {
             entry.label = s.motd();
             entry.ping = s.ping();
 
-            entry.playerCountLabel =
-                    MultiplayerServerListPinger.createPlayerCountText(
-                            s.online(),
-                            s.max()
-                    );
+            if (s.playersPresent()) {
+                entry.playerCountLabel =
+                        MultiplayerServerListPinger.createPlayerCountText(
+                                s.online(),
+                                s.max()
+                        );
 
-            entry.players = new ServerMetadata.Players(
-                    s.max(),
-                    s.online(),
-                    s.sample()
-            );
-            if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
+                entry.players = new ServerMetadata.Players(
+                        s.max(),
+                        s.online(),
+                        s.sample()
+                );
+                if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
+                else entry.playerListSummary = List.of();
+            } else {
+                entry.playerCountLabel = Text.translatable("multiplayer.status.unknown").formatted(Formatting.DARK_GRAY);
+            }
 
-            entry.version = Text.literal(s.version());
-            entry.protocolVersion = s.protocol();
+            if (s.version().isEmpty()) {
+                entry.version = Text.translatable("multiplayer.status.old");
+                entry.protocolVersion = 0;
+            } else {
+                entry.version = Text.literal(s.version());
+                try {
+                    int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
+                    // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
+                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
+                    else entry.protocolVersion = s.protocol();
+                } catch (Throwable t) {
+                    entry.protocolVersion = s.protocol();
+                }
+            }
             if (s.favicon() != null) {
-                entry.setFavicon(s.favicon().iconBytes());
+                entry.setFavicon(ServerInfo.validateFavicon(s.favicon().iconBytes()));
             }
         } else {
             entry.label = Text.translatable("multiplayer.status.pinging");
@@ -194,30 +213,40 @@ public abstract class ServerPingerMixin {
                 entry.label = s.motd();
                 entry.ping = s.ping();
 
-                entry.playerCountLabel =
-                        MultiplayerServerListPinger.createPlayerCountText(
-                                s.online(),
-                                s.max()
-                        );
+                if (s.playersPresent()) {
+                    entry.playerCountLabel =
+                            MultiplayerServerListPinger.createPlayerCountText(
+                                    s.online(),
+                                    s.max()
+                            );
 
-                entry.players = new ServerMetadata.Players(
-                        s.max(),
-                        s.online(),
-                        s.sample()
-                );
-                if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
+                    entry.players = new ServerMetadata.Players(
+                            s.max(),
+                            s.online(),
+                            s.sample()
+                    );
+                    if (!s.sample().isEmpty()) entry.playerListSummary = fastping$buildPlayerListSummary(s);
+                    else entry.playerListSummary = List.of();
+                } else {
+                    entry.playerCountLabel = Text.translatable("multiplayer.status.unknown").formatted(Formatting.DARK_GRAY);
+                }
 
-                entry.version = Text.literal(s.version());
-                try {
-                    int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
-                    // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
-                    if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
-                    else entry.protocolVersion = s.protocol();
-                } catch (Throwable t) {
-                    entry.protocolVersion = s.protocol();
+                if (s.version().isEmpty()) {
+                    entry.version = Text.translatable("multiplayer.status.old");
+                    entry.protocolVersion = 0;
+                } else {
+                    entry.version = Text.literal(s.version());
+                    try {
+                        int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
+                        // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
+                        if (protocol == s.protocol()) entry.protocolVersion = MinecraftVersion.create().protocolVersion();
+                        else entry.protocolVersion = s.protocol();
+                    } catch (Throwable t) {
+                        entry.protocolVersion = s.protocol();
+                    }
                 }
                 if (s.favicon() != null) {
-                    entry.setFavicon(s.favicon().iconBytes());
+                    entry.setFavicon(ServerInfo.validateFavicon(s.favicon().iconBytes()));
                 }
 
                 PingAvgMetrics.end(startNs);

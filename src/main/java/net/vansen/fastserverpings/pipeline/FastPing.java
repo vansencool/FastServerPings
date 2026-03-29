@@ -115,15 +115,10 @@ public final class FastPing {
         if (players != null && players.has("sample")) {
             for (JsonElement element : players.getAsJsonArray("sample")) {
                 JsonObject playerObj = element.getAsJsonObject();
-                String name = playerObj.has("name") ? playerObj.get("name").getAsString() : "";
-                try {
-                    PlayerConfigEntry entry = PlayerConfigEntry.read(playerObj);
-                    if (entry != null) {
-                        sample.add(entry);
-                    } else throw new IllegalArgumentException("Invalid");
-                } catch (IllegalArgumentException ignored) {
-                    sample.add(new PlayerConfigEntry(UUID.randomUUID(), name));
-                }
+                sample.add(new PlayerConfigEntry(
+                        UUID.fromString(playerObj.has("id") ? playerObj.get("id").getAsString() : UUID.randomUUID().toString()),
+                        playerObj.has("name") ? playerObj.get("name").getAsString() : "")
+                );
             }
         }
 

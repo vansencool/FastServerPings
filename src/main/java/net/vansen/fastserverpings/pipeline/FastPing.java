@@ -22,6 +22,7 @@ import net.minecraft.DetectedVersion;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.protocol.status.ServerStatus;
+import net.minecraft.server.players.NameAndId;
 import net.vansen.fastserverpings.pipeline.srv.SrvResolver;
 import net.vansen.fastserverpings.pipeline.status.Status;
 import net.vansen.fastserverpings.pipeline.utils.VarIntUtils;
@@ -31,6 +32,9 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -107,6 +111,17 @@ public final class FastPing {
                 ? players.get("max").getAsInt()
                 : 0;
 
+        List<NameAndId> sample = new ArrayList<>();
+        if (players != null && players.has("sample")) {
+            for (JsonElement element : players.getAsJsonArray("sample")) {
+                JsonObject playerObj = element.getAsJsonObject();
+                sample.add(new NameAndId(
+                        UUID.fromString(playerObj.has("id") ? playerObj.get("id").getAsString() : UUID.randomUUID().toString()),
+                        playerObj.has("name") ? playerObj.get("name").getAsString() : "")
+                );
+            }
+        }
+
         ServerStatus.Favicon favicon = null;
         if (root.has("favicon")) {
             favicon = ServerStatus.Favicon.CODEC
@@ -122,7 +137,9 @@ public final class FastPing {
                 version,
                 protocol,
                 ping,
-                favicon
+                favicon,
+                sample,
+                players != null
         );
     }
 

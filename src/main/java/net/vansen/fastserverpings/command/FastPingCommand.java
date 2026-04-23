@@ -112,16 +112,6 @@ public class FastPingCommand {
                                     PingAvgMetrics.sendAndReset(c.getSource().getPlayer());
                                     return 1;
                                 }))
-                        .then(literal("help")
-                                .executes(c -> {
-                                    var p = c.getSource().getPlayer();
-                                    p.sendSystemMessage(Component.literal("/fastping addservers").withStyle(ChatFormatting.GRAY));
-                                    p.sendSystemMessage(Component.literal("/fastping removeservers").withStyle(ChatFormatting.GRAY));
-                                    p.sendSystemMessage(Component.literal("/fastping clearallservers").withStyle(ChatFormatting.GRAY));
-                                    p.sendSystemMessage(Component.literal("/fastping togglefastping").withStyle(ChatFormatting.GRAY));
-                                    p.sendSystemMessage(Component.literal("/fastping pingmetrics").withStyle(ChatFormatting.GRAY));
-                                    return 1;
-                                }))
         ));
     }
 }

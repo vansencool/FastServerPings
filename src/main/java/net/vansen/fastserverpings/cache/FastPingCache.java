@@ -19,7 +19,7 @@ public final class FastPingCache {
         MAP.put(key, new CacheEntry(status, System.currentTimeMillis()));
     }
 
-    public static boolean fresh(@NotNull CacheEntry e) {
+    public static boolean isFresh(@NotNull CacheEntry e) {
         return System.currentTimeMillis() - e.timeMs() < TTL_MS;
     }
 }

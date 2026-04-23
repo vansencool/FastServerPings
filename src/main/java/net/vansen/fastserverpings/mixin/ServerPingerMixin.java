@@ -16,6 +16,7 @@ import net.vansen.fastserverpings.cache.FastPingCache;
 import net.vansen.fastserverpings.metrics.PingAvgMetrics;
 import net.vansen.fastserverpings.pipeline.FastPing;
 import net.vansen.fastserverpings.pipeline.status.Status;
+import net.vansen.fastserverpings.pipeline.status.StatusType;
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -33,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @Mixin(ServerStatusPinger.class)
 public abstract class ServerPingerMixin {
@@ -63,15 +65,16 @@ public abstract class ServerPingerMixin {
     private static CompletableFuture<Status> pingWithRetry(
             @NotNull String host,
             int port,
-            @SuppressWarnings("SameParameterValue") int attempts, // TODO: make configurable
-            @NotNull Runnable onRetry
+            @SuppressWarnings("SameParameterValue") int attempts,
+            @NotNull Runnable onRetry,
+            @NotNull Consumer<Status> listener
     ) {
         return ACTIVE_PINGS.computeIfAbsent(host + ":" + port, k ->
                 CompletableFuture.supplyAsync(() -> {
                     Throwable last = null;
                     for (int i = 0; i < attempts; i++) {
                         try {
-                            return FastPing.ping(host, port).join();
+                            return FastPing.ping(host, port, listener).join();
                         } catch (Throwable t) {
                             last = t;
                             onRetry.run();
@@ -144,7 +147,7 @@ public abstract class ServerPingerMixin {
         String key = entry.ip;
         CacheEntry cached = FastPingCache.get(key);
 
-        if (cached != null && FastPingCache.fresh(cached)) { // SWR: stale-while-revalidate
+        if (cached != null && FastPingCache.isFresh(cached)) { // SWR: stale-while-revalidate
             var s = cached.status();
 
             entry.motd = s.motd();
@@ -204,45 +207,51 @@ public abstract class ServerPingerMixin {
             pingWithRetry(host, port, 3, () -> { // Retry callback
                 entry.motd = Component.literal("Failed to ping server, retrying...").withStyle(ChatFormatting.YELLOW);
                 entry.ping = -1;
-            }).thenAccept(s -> { // Success
-                FastPingCache.put(key, s);
-                entry.motd = s.motd();
-                entry.ping = s.ping();
+            }, s -> {
+                if (s.type() == StatusType.EARLY) {
+                    entry.motd = s.motd();
 
-                if (s.playersPresent()) {
-                    entry.status = ServerStatusPinger.formatPlayerCount(s.online(), s.max());
+                    if (s.playersPresent()) {
+                        entry.status = ServerStatusPinger.formatPlayerCount(s.online(), s.max());
 
-                    entry.players = new ServerStatus.Players(
-                            s.max(),
-                            s.online(),
-                            s.sample()
-                    );
-                    if (!s.sample().isEmpty()) entry.playerList = fastping$buildPlayerListSummary(s);
-                    else entry.playerList = List.of();
-                } else {
-                    entry.status = Component.translatable("multiplayer.status.unknown").withStyle(ChatFormatting.DARK_GRAY);
-                }
-
-                if (s.version().isEmpty()) {
-                    entry.version = Component.translatable("multiplayer.status.old");
-                    entry.protocol = 0;
-                } else {
-                    entry.version = Component.literal(s.version());
-                    try {
-                        int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
-                        // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
-                        if (protocol == s.protocol()) entry.protocol = DetectedVersion.tryDetectVersion().protocolVersion();
-                        else entry.protocol = s.protocol();
-                    } catch (Throwable t) {
-                        entry.protocol = s.protocol();
+                        entry.players = new ServerStatus.Players(
+                                s.max(),
+                                s.online(),
+                                s.sample()
+                        );
+                        if (!s.sample().isEmpty()) entry.playerList = fastping$buildPlayerListSummary(s);
+                        else entry.playerList = List.of();
+                    } else {
+                        entry.status = Component.translatable("multiplayer.status.unknown").withStyle(ChatFormatting.DARK_GRAY);
                     }
-                }
-                if (s.favicon() != null) {
-                    entry.setIconBytes(ServerData.validateIcon(s.favicon().iconBytes()));
-                }
 
-                PingAvgMetrics.end(startNs);
-                pingCallback.run();
+                    if (s.version().isEmpty()) {
+                        entry.version = Component.translatable("multiplayer.status.old");
+                        entry.protocol = 0;
+                    } else {
+                        entry.version = Component.literal(s.version());
+                        try {
+                            int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
+                            // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
+                            if (protocol == s.protocol())
+                                entry.protocol = DetectedVersion.tryDetectVersion().protocolVersion();
+                            else entry.protocol = s.protocol();
+                        } catch (Throwable t) {
+                            entry.protocol = s.protocol();
+                        }
+                    }
+                    if (s.favicon() != null) {
+                        entry.setIconBytes(ServerData.validateIcon(s.favicon().iconBytes()));
+                    }
+
+                    pingCallback.run();
+                } else if (s.type() == StatusType.COMPLETE) {
+                    FastPingCache.put(key, s);
+                    entry.ping = s.ping();
+
+                    PingAvgMetrics.end(startNs);
+                    pingCallback.run();
+                }
             }).exceptionally(e -> {
                 entry.motd = Component.translatable("multiplayer.status.cannot_connect").withColor(-65536);
                 entry.status = CommonComponents.EMPTY;

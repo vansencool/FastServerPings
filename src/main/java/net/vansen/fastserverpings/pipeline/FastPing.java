@@ -25,6 +25,7 @@ import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.server.players.NameAndId;
 import net.vansen.fastserverpings.pipeline.srv.SrvResolver;
 import net.vansen.fastserverpings.pipeline.status.Status;
+import net.vansen.fastserverpings.pipeline.status.StatusType;
 import net.vansen.fastserverpings.pipeline.utils.VarIntUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -38,11 +39,12 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 @SuppressWarnings("deprecation")
 public final class FastPing {
 
-    private static final EventLoopGroup GROUP = new NioEventLoopGroup(4); // Backwards compatibility with older Netty versions
+    private static final EventLoopGroup GROUP = new NioEventLoopGroup(4);
     public static boolean DEBUG = false;
 
     private static void log(String s) {
@@ -50,13 +52,9 @@ public final class FastPing {
     }
 
     /**
-     * Pings a Minecraft server at the given host and port, resolving SRV records if necessary.
-     *
-     * @param host the server host
-     * @param port the server port
-     * @return a CompletableFuture that will complete with the server status
+     * Two-phase ping. The listener fires with {@code EARLY} on packet 0, the future completes with {@code COMPLETE} on packet 1.
      */
-    public static CompletableFuture<Status> ping(@NotNull String host, int port) {
+    public static CompletableFuture<Status> ping(@NotNull String host, int port, @NotNull Consumer<Status> listener) {
         CompletableFuture<Status> future = new CompletableFuture<>();
 
         var resolved = SrvResolver.resolve(host, port);
@@ -71,7 +69,7 @@ public final class FastPing {
                     @Override
                     protected void initChannel(Channel ch) {
                         log("initChannel");
-                        ch.pipeline().addLast(new PingHandler(future, resolved.host(), resolved.port()));
+                        ch.pipeline().addLast(new PingHandler(future, resolved.host(), resolved.port(), listener));
                     }
                 });
 
@@ -88,7 +86,7 @@ public final class FastPing {
         return future;
     }
 
-    private static Status parse(@NotNull String json, long ping) {
+    private static Status parse(@NotNull String json, long ping, @NotNull StatusType type) {
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
         Component motd = parseMotd(root);
@@ -139,7 +137,8 @@ public final class FastPing {
                 ping,
                 favicon,
                 sample,
-                players != null
+                players != null,
+                type
         );
     }
 
@@ -166,6 +165,7 @@ public final class FastPing {
         private final CompletableFuture<Status> future;
         private final String host;
         private final int port;
+        private final Consumer<Status> listener;
 
         private final ByteBuf cumulation = Unpooled.buffer();
         private long pingStart;
@@ -173,15 +173,11 @@ public final class FastPing {
 
         private ScheduledFuture<?> timeout;
 
-        /**
-         * @param future CompletableFuture to complete with the result
-         * @param host   the server host
-         * @param port   the server port
-         */
-        PingHandler(@NotNull CompletableFuture<Status> future, @NotNull String host, int port) {
+        PingHandler(@NotNull CompletableFuture<Status> future, @NotNull String host, int port, @NotNull Consumer<Status> listener) {
             this.future = future;
             this.host = host;
             this.port = port;
+            this.listener = listener;
         }
 
         @Override
@@ -193,7 +189,7 @@ public final class FastPing {
                     future.completeExceptionally(new TimeoutException("Ping timeout"));
                     ctx.close();
                 }
-            }, 7, TimeUnit.SECONDS); // TODO: Make timeout configurable
+            }, 7, TimeUnit.SECONDS);
 
             ByteBuf handshake = handshakeBuf();
             ByteBuf statusReq = statusRequestBuf();
@@ -247,6 +243,9 @@ public final class FastPing {
                 statusJson = new String(arr, StandardCharsets.UTF_8);
                 log("Status JSON received");
 
+                listener.accept(parse(statusJson, -1L, StatusType.EARLY)); // Two-phase ping
+                log("Early phase fired");
+
                 pingStart = System.nanoTime();
                 ctx.writeAndFlush(pingPacket(pingStart)); // Send ping packet
                 log("Ping sent");
@@ -255,10 +254,11 @@ public final class FastPing {
                 long ping = (System.nanoTime() - pingStart) / 1_000_000;
                 log("Pong received: " + ping + "ms");
 
-                Status s = parse(statusJson, ping);
+                Status s = parse(statusJson, ping, StatusType.COMPLETE);
                 if (timeout != null) {
                     timeout.cancel(false);
                 }
+                listener.accept(s);
                 future.complete(s);
                 ctx.close();
             } else {
@@ -287,7 +287,7 @@ public final class FastPing {
             inner.writeCharSequence(host, StandardCharsets.UTF_8);
             inner.writeShort(port);
             VarIntUtils.writeVarInt(inner, 1);
-            return frame(inner); // Frame the packet
+            return frame(inner);
         }
 
         private ByteBuf statusRequestBuf() {

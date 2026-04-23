@@ -30,20 +30,14 @@ public final class PingAvgMetrics {
         long t = totalNs.sumThenReset();
 
         if (c == 0) {
-            p.sendSystemMessage(Component.literal("[PingAvgMetrics] no data"));
+            p.sendSystemMessage(Component.literal("[PingAvgMetrics] No data"));
             return;
         }
 
         double avgMs = (t / (double) c) / 1_000_000.0;
 
         p.sendSystemMessage(
-                Component.literal(
-                        "[PingAvgMetrics] " +
-                                (USE_FASTPING ? "FASTPING" : "VANILLA") +
-                                " avg per-server = " +
-                                String.format("%.2f", avgMs) +
-                                " ms (" + c + " servers)"
-                )
+                Component.literal("[PingAvgMetrics] " + (USE_FASTPING ? "FASTPING" : "VANILLA") + " avg per-server = " + String.format("%.2f", avgMs) + " ms (" + c + " servers)")
         );
     }
 }

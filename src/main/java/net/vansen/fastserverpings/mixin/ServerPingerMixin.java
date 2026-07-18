@@ -1,6 +1,5 @@
 package net.vansen.fastserverpings.mixin;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.viaversion.viafabricplus.ViaFabricPlus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.DetectedVersion;
@@ -31,9 +30,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 @Mixin(ServerStatusPinger.class)
@@ -45,21 +41,6 @@ public abstract class ServerPingerMixin {
     // Map of servers that are being pinged currently to prevent duplicate pings to the same server
     // Causes less rate limiting when spamming refresh, and also doesn't stall for 10 seconds after spamming refresh
     private static final ConcurrentHashMap<String, CompletableFuture<Status>> ACTIVE_PINGS = new ConcurrentHashMap<>();
-
-    @Unique
-    private static final ThreadPoolExecutor PINGER =
-            new ThreadPoolExecutor(
-                    32,
-                    32,
-                    0L,
-                    TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<>(256),
-                    new ThreadFactoryBuilder()
-                            .setNameFormat("FastPing #%d")
-                            .setDaemon(true)
-                            .build(),
-                    new ThreadPoolExecutor.DiscardPolicy()
-            );
 
     @Unique
     private static CompletableFuture<Status> pingWithRetry(
@@ -81,7 +62,7 @@ public abstract class ServerPingerMixin {
                         }
                     }
                     throw new CompletionException(last);
-                }, PINGER).whenComplete((r, e) -> ACTIVE_PINGS.remove(k))
+                }, FastPing.pinger()).whenComplete((r, e) -> ACTIVE_PINGS.remove(k))
         );
     }
 

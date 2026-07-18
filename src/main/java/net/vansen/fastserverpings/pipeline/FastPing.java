@@ -1,5 +1,6 @@
 package net.vansen.fastserverpings.pipeline;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -37,6 +38,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -45,6 +48,19 @@ import java.util.function.Consumer;
 public final class FastPing {
 
     private static final EventLoopGroup GROUP = new NioEventLoopGroup(4);
+    private static final ThreadPoolExecutor PINGER =
+            new ThreadPoolExecutor(
+                    32,
+                    32,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(256),
+                    new ThreadFactoryBuilder()
+                            .setNameFormat("FastPing #%d")
+                            .setDaemon(true)
+                            .build(),
+                    new ThreadPoolExecutor.DiscardPolicy()
+            );
     public static boolean DEBUG = false;
 
     private static void log(String s) {
@@ -60,6 +76,10 @@ public final class FastPing {
         var resolved = SrvResolver.resolve(host, port);
         log("Resolved " + host + ":" + port + " -> " + resolved.host() + ":" + resolved.port());
 
+        if (GROUP.isShutdown()) {
+            log("Called ping after group shutdown.");
+            return CompletableFuture.failedFuture(new IllegalStateException("EventLoopGroup has been shut down"));
+        }
         Bootstrap b = new Bootstrap()
                 .group(GROUP)
                 .channel(NioSocketChannel.class)
@@ -84,6 +104,14 @@ public final class FastPing {
                 });
 
         return future;
+    }
+
+    public static ThreadPoolExecutor pinger() {
+        return PINGER;
+    }
+
+    public static EventLoopGroup eventLoopGroup() {
+        return GROUP;
     }
 
     private static Status parse(@NotNull String json, long ping, @NotNull StatusType type) {

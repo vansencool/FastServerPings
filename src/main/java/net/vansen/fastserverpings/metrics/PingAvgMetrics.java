@@ -11,6 +11,7 @@ public final class PingAvgMetrics {
     private static final LongAdder totalNs = new LongAdder();
     private static final LongAdder count = new LongAdder();
     public static boolean USE_FASTPING = true;
+    public static volatile boolean BENCHMARKING = false;
 
     public static long start() {
         return System.nanoTime();

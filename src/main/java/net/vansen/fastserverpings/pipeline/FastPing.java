@@ -93,7 +93,7 @@ public final class FastPing {
                     }
                 });
 
-        b.connect(InetSocketAddress.createUnresolved(resolved.host(), resolved.port())) // Connect to server
+        var channel = b.connect(InetSocketAddress.createUnresolved(resolved.host(), resolved.port())) // Connect to server
                 .addListener((ChannelFutureListener) f -> {
                     if (!f.isSuccess()) {
                         log("Connect failed: " + f.cause());
@@ -102,6 +102,17 @@ public final class FastPing {
                         log("Connected");
                     }
                 });
+
+        // The handler's timeout only starts once the channel goes active, so a server that never
+        // responds to the connect would otherwise leave this future pending forever
+        var deadline = GROUP.schedule(() -> {
+            if (!future.isDone()) {
+                log("Ping deadline exceeded");
+                future.completeExceptionally(new TimeoutException("Ping deadline exceeded"));
+                channel.channel().close();
+            }
+        }, 10, TimeUnit.SECONDS);
+        future.whenComplete((s, e) -> deadline.cancel(false));
 
         return future;
     }

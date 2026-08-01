@@ -1,5 +1,6 @@
 package net.vansen.fastserverpings.command;
 
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -11,6 +12,11 @@ import net.vansen.fastserverpings.metrics.PingAvgMetrics;
 import net.vansen.fastserverpings.pipeline.FastPing;
 import net.vansen.fastserverpings.servers.PresetServers;
 
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 public class FastPingCommand {
@@ -98,6 +104,12 @@ public class FastPingCommand {
                                         })))
                         .then(literal("togglefastping")
                                 .executes(c -> {
+                                    if (PingAvgMetrics.BENCHMARKING) {
+                                        c.getSource().getPlayer().sendSystemMessage(
+                                                Component.literal("[PingAvgMetrics] ").withStyle(ChatFormatting.LIGHT_PURPLE)
+                                                        .append(Component.literal("Cannot toggle while a benchmark is running").withStyle(ChatFormatting.RED)));
+                                        return 1;
+                                    }
                                     PingAvgMetrics.toggleEnable();
                                     c.getSource().getPlayer().sendSystemMessage(
                                             Component.literal("[PingAvgMetrics] ").withStyle(ChatFormatting.LIGHT_PURPLE)
@@ -107,6 +119,54 @@ public class FastPingCommand {
                                     );
                                     return 1;
                                 }))
+                        .then(literal("benchmark")
+                                .then(argument("count", IntegerArgumentType.integer(1, PresetServers.SERVERS.length))
+                                        .executes(c -> {
+                                            var player = c.getSource().getPlayer();
+
+                                            if (PingAvgMetrics.BENCHMARKING) {
+                                                player.sendSystemMessage(Component.literal("[Benchmark] ").withStyle(ChatFormatting.LIGHT_PURPLE)
+                                                        .append(Component.literal("A benchmark is already running").withStyle(ChatFormatting.RED)));
+                                                return 1;
+                                            }
+
+                                            int total = IntegerArgumentType.getInteger(c, "count");
+                                            boolean fastping = PingAvgMetrics.USE_FASTPING;
+                                            PingAvgMetrics.BENCHMARKING = true;
+
+                                            player.sendSystemMessage(Component.literal("[Benchmark] ").withStyle(ChatFormatting.LIGHT_PURPLE)
+                                                    .append(Component.literal("Pinging " + total + " servers using ").withStyle(ChatFormatting.WHITE))
+                                                    .append(Component.literal(fastping ? "FastPing" : "Vanilla").withStyle(fastping ? ChatFormatting.GREEN : ChatFormatting.YELLOW)));
+
+                                            AtomicInteger done = new AtomicInteger();
+                                            AtomicInteger failed = new AtomicInteger();
+                                            AtomicBoolean reported = new AtomicBoolean();
+                                            long startNs = System.nanoTime();
+
+                                            Runnable report = () -> {
+                                                if (!reported.compareAndSet(false, true)) return;
+                                                long wallMs = (System.nanoTime() - startNs) / 1_000_000;
+                                                int finished = done.get();
+                                                PingAvgMetrics.BENCHMARKING = false;
+                                                player.sendSystemMessage(Component.literal("[Benchmark] ").withStyle(ChatFormatting.LIGHT_PURPLE)
+                                                        .append(Component.literal(fastping ? "FastPing" : "Vanilla").withStyle(fastping ? ChatFormatting.GREEN : ChatFormatting.YELLOW))
+                                                        .append(Component.literal(" pinged " + finished + "/" + total + " servers in ").withStyle(ChatFormatting.WHITE))
+                                                        .append(Component.literal(wallMs + " ms").withStyle(ChatFormatting.AQUA))
+                                                        .append(Component.literal(" (" + failed.get() + " failed)").withStyle(ChatFormatting.GRAY)));
+                                            };
+
+                                            FastPing.eventLoopGroup().schedule(report, 60, TimeUnit.SECONDS); // Never leave the benchmark wedged
+
+                                            for (int i = 0; i < total; i++) {
+                                                String[] s = PresetServers.SERVERS[i];
+                                                FastPing.ping(s[0], Integer.parseInt(s[1]), st -> {
+                                                }).orTimeout(5, TimeUnit.SECONDS).whenComplete((st, e) -> {
+                                                    if (e != null) failed.incrementAndGet();
+                                                    if (done.incrementAndGet() == total) report.run();
+                                                });
+                                            }
+                                            return 1;
+                                        })))
                         .then(literal("pingmetrics")
                                 .executes(c -> {
                                     PingAvgMetrics.sendAndReset(c.getSource().getPlayer());

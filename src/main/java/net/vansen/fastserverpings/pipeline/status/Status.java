@@ -20,6 +20,7 @@ import java.util.List;
  * @param favicon        the server's favicon
  * @param sample         the sample player list shown on hover
  * @param playersPresent whether the players field was present in the server response
+ * @param type           when the status was made
  */
 public record Status(
         @NotNull Text motd,
@@ -30,6 +31,7 @@ public record Status(
         long ping,
         @Nullable ServerMetadata.Favicon favicon,
         @NotNull List<PlayerConfigEntry> sample,
-        boolean playersPresent
+        boolean playersPresent,
+        @NotNull StatusType type
 ) {
 }

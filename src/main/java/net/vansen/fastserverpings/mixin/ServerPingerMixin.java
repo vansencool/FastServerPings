@@ -24,6 +24,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -41,6 +44,28 @@ public abstract class ServerPingerMixin {
     // Map of servers that are being pinged currently to prevent duplicate pings to the same server
     // Causes less rate limiting when spamming refresh, and also doesn't stall for 10 seconds after spamming refresh
     private static final ConcurrentHashMap<String, CompletableFuture<Status>> ACTIVE_PINGS = new ConcurrentHashMap<>();
+
+    @Unique
+    private static final MethodHandle TRANSLATING_VERSION = fastping$findTranslatingVersionSetter();
+
+    @Unique
+    private static MethodHandle fastping$findTranslatingVersionSetter() {
+        try {
+            Class<?> protocolVersion = Class.forName("com.viaversion.viaversion.api.protocol.version.ProtocolVersion");
+            return MethodHandles.lookup().findVirtual(ServerData.class, "viaFabricPlus$setTranslatingVersion", MethodType.methodType(void.class, protocolVersion));
+        } catch (Throwable e) {
+            return null; // ViaFabricPlus is not present or outdated version
+        }
+    }
+
+    @Unique
+    private static void fastping$setTranslatingVersion(@NotNull ServerData entry) {
+        if (TRANSLATING_VERSION == null) return;
+        try {
+            TRANSLATING_VERSION.invoke(entry, ViaFabricPlus.getImpl().getTargetVersion()); // ViaFabricPlus reads this when drawing its version tooltip, and normally sets it from the vanilla pinger we cancel
+        } catch (Throwable ignored) {
+        }
+    }
 
     @Unique
     private static CompletableFuture<Status> pingWithRetry(
@@ -162,6 +187,7 @@ public abstract class ServerPingerMixin {
                     entry.protocol = s.protocol();
                 }
             }
+            fastping$setTranslatingVersion(entry);
             if (s.favicon() != null) {
                 entry.setIconBytes(ServerData.validateIcon(s.favicon().iconBytes()));
             }
@@ -221,6 +247,7 @@ public abstract class ServerPingerMixin {
                             entry.protocol = s.protocol();
                         }
                     }
+                    fastping$setTranslatingVersion(entry);
                     if (s.favicon() != null) {
                         entry.setIconBytes(ServerData.validateIcon(s.favicon().iconBytes()));
                     }

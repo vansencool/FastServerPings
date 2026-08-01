@@ -11,6 +11,7 @@ public final class PingAvgMetrics {
     private static final LongAdder totalNs = new LongAdder();
     private static final LongAdder count = new LongAdder();
     public static boolean USE_FASTPING = true;
+    public static volatile boolean BENCHMARKING = false;
 
     public static long start() {
         return System.nanoTime();
@@ -30,20 +31,14 @@ public final class PingAvgMetrics {
         long t = totalNs.sumThenReset();
 
         if (c == 0) {
-            p.sendMessage(Text.literal("[PingAvgMetrics] no data"), false);
+            p.sendMessage(Text.literal("[PingAvgMetrics] No data"), false);
             return;
         }
 
         double avgMs = (t / (double) c) / 1_000_000.0;
 
         p.sendMessage(
-                Text.literal(
-                        "[PingAvgMetrics] " +
-                                (USE_FASTPING ? "FASTPING" : "VANILLA") +
-                                " avg per-server = " +
-                                String.format("%.2f", avgMs) +
-                                " ms (" + c + " servers)"
-                ),
+                Text.literal("[PingAvgMetrics] " + (USE_FASTPING ? "FASTPING" : "VANILLA") + " avg per-server = " + String.format("%.2f", avgMs) + " ms (" + c + " servers)"),
                 false
         );
     }

@@ -47,7 +47,14 @@ import java.util.function.Consumer;
 @SuppressWarnings("deprecation")
 public final class FastPing {
 
-    private static final EventLoopGroup GROUP = new NioEventLoopGroup(4);
+    public static final NioEventLoopGroup GROUP = new NioEventLoopGroup(
+            4,
+            new ThreadFactoryBuilder()
+                    .setNameFormat("FastPing-Netty #%d")
+                    .setDaemon(true)
+                    .build()
+    );
+
     private static final ThreadPoolExecutor PINGER =
             new ThreadPoolExecutor(
                     32,

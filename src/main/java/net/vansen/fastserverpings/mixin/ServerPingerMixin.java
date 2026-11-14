@@ -1,6 +1,5 @@
 package net.vansen.fastserverpings.mixin;
 
-import com.viaversion.viafabricplus.ViaFabricPlus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.DetectedVersion;
 import net.minecraft.client.multiplayer.ServerData;
@@ -16,6 +15,7 @@ import net.vansen.fastserverpings.metrics.PingAvgMetrics;
 import net.vansen.fastserverpings.pipeline.FastPing;
 import net.vansen.fastserverpings.pipeline.status.Status;
 import net.vansen.fastserverpings.pipeline.status.StatusType;
+import net.vansen.fastserverpings.pipeline.utils.ViaUtils;
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -24,9 +24,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -44,28 +41,6 @@ public abstract class ServerPingerMixin {
     // Map of servers that are being pinged currently to prevent duplicate pings to the same server
     // Causes less rate limiting when spamming refresh, and also doesn't stall for 10 seconds after spamming refresh
     private static final ConcurrentHashMap<String, CompletableFuture<Status>> ACTIVE_PINGS = new ConcurrentHashMap<>();
-
-    @Unique
-    private static final MethodHandle TRANSLATING_VERSION = fastping$findTranslatingVersionSetter();
-
-    @Unique
-    private static MethodHandle fastping$findTranslatingVersionSetter() {
-        try {
-            Class<?> protocolVersion = Class.forName("com.viaversion.viaversion.api.protocol.version.ProtocolVersion");
-            return MethodHandles.lookup().findVirtual(ServerData.class, "viaFabricPlus$setTranslatingVersion", MethodType.methodType(void.class, protocolVersion));
-        } catch (Throwable e) {
-            return null; // ViaFabricPlus is not present or outdated version
-        }
-    }
-
-    @Unique
-    private static void fastping$setTranslatingVersion(@NotNull ServerData entry) {
-        if (TRANSLATING_VERSION == null) return;
-        try {
-            TRANSLATING_VERSION.invoke(entry, ViaFabricPlus.getImpl().getTargetVersion()); // ViaFabricPlus reads this when drawing its version tooltip, and normally sets it from the vanilla pinger we cancel
-        } catch (Throwable ignored) {
-        }
-    }
 
     @Unique
     private static CompletableFuture<Status> pingWithRetry(
@@ -87,7 +62,7 @@ public abstract class ServerPingerMixin {
                         }
                     }
                     throw new CompletionException(last);
-                }, FastPing.pinger()).whenComplete((r, e) -> ACTIVE_PINGS.remove(k))
+                }, FastPing.pinger()).whenComplete((ignored, _) -> ACTIVE_PINGS.remove(k))
         );
     }
 
@@ -179,7 +154,7 @@ public abstract class ServerPingerMixin {
             } else {
                 entry.version = Component.literal(s.version());
                 try {
-                    int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
+                    int protocol = ViaUtils.targetProtocol();
                     // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
                     if (protocol == s.protocol()) entry.protocol = DetectedVersion.tryDetectVersion().protocolVersion();
                     else entry.protocol = s.protocol();
@@ -187,7 +162,7 @@ public abstract class ServerPingerMixin {
                     entry.protocol = s.protocol();
                 }
             }
-            fastping$setTranslatingVersion(entry);
+            ViaUtils.setTranslatingVersion(entry);
             if (s.favicon() != null) {
                 entry.setIconBytes(ServerData.validateIcon(s.favicon().iconBytes()));
             }
@@ -238,7 +213,7 @@ public abstract class ServerPingerMixin {
                     } else {
                         entry.version = Component.literal(s.version());
                         try {
-                            int protocol = ViaFabricPlus.getImpl().getTargetVersion().getVersion();
+                            int protocol = ViaUtils.targetProtocol();
                             // To prevent minecraft showing "Outdated Server" for servers that are actually compatible with the client version
                             if (protocol == s.protocol())
                                 entry.protocol = DetectedVersion.tryDetectVersion().protocolVersion();
@@ -247,7 +222,7 @@ public abstract class ServerPingerMixin {
                             entry.protocol = s.protocol();
                         }
                     }
-                    fastping$setTranslatingVersion(entry);
+                    ViaUtils.setTranslatingVersion(entry);
                     if (s.favicon() != null) {
                         entry.setIconBytes(ServerData.validateIcon(s.favicon().iconBytes()));
                     }
@@ -260,7 +235,7 @@ public abstract class ServerPingerMixin {
                     PingAvgMetrics.end(startNs);
                     pingCallback.run();
                 }
-            }).exceptionally(e -> {
+            }).exceptionally(ignored -> {
                 entry.motd = Component.translatable("multiplayer.status.cannot_connect").withColor(-65536);
                 entry.status = CommonComponents.EMPTY;
                 entry.ping = -1;

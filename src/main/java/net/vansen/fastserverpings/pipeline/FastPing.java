@@ -5,7 +5,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
-import com.viaversion.viafabricplus.ViaFabricPlus;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -28,6 +27,7 @@ import net.vansen.fastserverpings.pipeline.srv.SrvResolver;
 import net.vansen.fastserverpings.pipeline.status.Status;
 import net.vansen.fastserverpings.pipeline.status.StatusType;
 import net.vansen.fastserverpings.pipeline.utils.VarIntUtils;
+import net.vansen.fastserverpings.pipeline.utils.ViaUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -119,7 +119,7 @@ public final class FastPing {
                 channel.channel().close();
             }
         }, 10, TimeUnit.SECONDS);
-        future.whenComplete((s, e) -> deadline.cancel(false));
+        future.whenComplete((ignored, _) -> deadline.cancel(false));
 
         return future;
     }
@@ -324,7 +324,7 @@ public final class FastPing {
             VarIntUtils.writeVarInt(inner, 0);
 
             try {
-                VarIntUtils.writeVarInt(inner, ViaFabricPlus.getImpl().getTargetVersion().getVersion()); // Compatibility with ViaFabricPlus if present
+                VarIntUtils.writeVarInt(inner, ViaUtils.targetProtocol()); // Compatibility with ViaFabricPlus if present
             } catch (Throwable e) {
                 VarIntUtils.writeVarInt(inner, DetectedVersion.tryDetectVersion().protocolVersion()); // Protocol version
             }
